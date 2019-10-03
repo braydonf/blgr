@@ -4,7 +4,18 @@
 'use strict';
 
 const assert = require('bsert');
+const {tmpdir} = require('os');
+const Path = require('path');
+const fs = require('fs');
+const pfs = require('../lib/fs'); // Has promisified stat, but no mkdir
 const Logger = require('../lib/logger');
+
+function tempFile(name) {
+  const time = Date.now();
+  const dir = Path.join(tmpdir(), `blgr-test-${time}`);
+  fs.mkdirSync(dir);
+  return Path.join(dir, `${name}.log`);
+};
 
 describe('Logger', function() {
   describe('log', function() {
@@ -241,6 +252,38 @@ describe('Logger', function() {
       assert.equal(called.level, Logger.levels.SPAM);
       assert.equal(called.args.length, 1);
       checkMsg(called.args[0], true, false);
+    });
+  });
+
+  describe('file size', function() {
+    const actualSize = Logger.MAX_FILE_SIZE;
+    const testSize = 1 * 1000 * 1000; // 1 MiB
+    const filename = tempFile('file-size');
+    let logger;
+
+    before(async () => {
+      Logger.MAX_FILE_SIZE = testSize;
+
+      logger = new Logger({
+        level: 'spam',
+        filename: filename,
+        console: false
+      });
+      await logger.open();
+    });
+
+    after(async () => {
+      await logger.close();
+      Logger.MAX_FILE_SIZE = actualSize;
+    });
+
+    it('should keep log file under the size limit while running', async () => {
+      for (let i = 0; i < 2000; i++) {
+        logger.debug(`${i}`);
+        logger.debug(Buffer.alloc(1000).toString('hex'));
+      }
+      const stat = await pfs.stat(filename);
+      assert(stat.size <= (testSize + (testSize / 10)));
     });
   });
 });

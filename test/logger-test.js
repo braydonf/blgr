@@ -257,12 +257,15 @@ describe('Logger', function() {
 
   describe('file size', function() {
     const actualSize = Logger.MAX_FILE_SIZE;
+    const actualThreshold = Logger.TRUNCATE_THRESHOLD;
     const testSize = 1 * 1000 * 1000; // 1 MiB
+    const testThreshold = testSize / 10;
     const filename = tempFile('file-size');
     let logger;
 
     before(async () => {
       Logger.MAX_FILE_SIZE = testSize;
+      Logger.TRUNCATE_THRESHOLD = testThreshold;
 
       logger = new Logger({
         level: 'spam',
@@ -275,15 +278,17 @@ describe('Logger', function() {
     after(async () => {
       await logger.close();
       Logger.MAX_FILE_SIZE = actualSize;
+      Logger.TRUNCATE_THRESHOLD = actualThreshold;
     });
 
     it('should keep log file under the size limit while running', async () => {
-      for (let i = 0; i < 2000; i++) {
+      for (let i = 0; i < 10000; i++) {
         logger.debug(`${i}`);
-        logger.debug(Buffer.alloc(1000).toString('hex'));
+        // 500 bytes = 1000 char hex = 1000 bytes written to log file
+        logger.debug(Buffer.alloc(500).toString('hex'));
       }
       const stat = await pfs.stat(filename);
-      assert(stat.size <= (testSize + (testSize / 10)));
+      assert(stat.size <= (testSize + testThreshold));
     });
   });
 });
